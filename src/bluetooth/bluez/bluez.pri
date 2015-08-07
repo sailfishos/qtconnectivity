@@ -18,9 +18,9 @@ HEADERS += bluez/manager_p.h \
            bluez/agent_p.h \
            bluez/servicemap_p.h \
            bluez/obex_client_p.h \
-           bluez/obex_agent_p.h \
+           bluez/obex_objectpush_p.h \
            bluez/obex_transfer_p.h \
-           bluez/obex_manager_p.h
+           bluez/obextransfer.h
 
 
 SOURCES += bluez/manager.cpp \
@@ -30,6 +30,6 @@ SOURCES += bluez/manager.cpp \
            bluez/service.cpp \
            bluez/servicemap.cpp \
            bluez/obex_client.cpp \
-           bluez/obex_agent.cpp \
+           bluez/obex_objectpush.cpp \
            bluez/obex_transfer.cpp \
-           bluez/obex_manager.cpp
+           bluez/obextransfer.cpp

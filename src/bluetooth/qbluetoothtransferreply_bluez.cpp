@@ -44,42 +44,39 @@
 #include "qbluetoothaddress.h"
 
 #include "bluez/obex_client_p.h"
-#include "bluez/obex_manager_p.h"
-#include "bluez/obex_agent_p.h"
 #include "bluez/obex_transfer_p.h"
+#include "bluez/obex_objectpush_p.h"
 #include "qbluetoothtransferreply.h"
+#include "obextransfer.h"
 
 #include <QtCore/QLoggingCategory>
 #include <QFuture>
 #include <QFutureWatcher>
 #include <QtConcurrentRun>
-
-static const QLatin1String agentPath("/qt/agent");
+#include <QDebug>
 
 QT_BEGIN_NAMESPACE
 
 Q_DECLARE_LOGGING_CATEGORY(QT_BT_BLUEZ)
 
+static inline QString orgBluezObexClientString()
+{
+    return QStringLiteral("org.bluez.obex.client");
+}
+
 QBluetoothTransferReplyBluez::QBluetoothTransferReplyBluez(QIODevice *input, const QBluetoothTransferRequest &request,
                                                            QBluetoothTransferManager *parent)
-:   QBluetoothTransferReply(parent), tempfile(0), source(input),
+    :   QBluetoothTransferReply(parent), objectTransfer(0), objectPush(0), client(0), tempfile(0), source(input),
     m_running(false), m_finished(false), m_size(0),
-    m_error(QBluetoothTransferReply::NoError), m_errorStr(), m_transfer_path()
+    m_error(QBluetoothTransferReply::NoError), m_errorStr()
 {
     setRequest(request);
     setManager(parent);
-    client = new OrgOpenobexClientInterface(QLatin1String("org.openobex.client"), QLatin1String("/"),
-                                           QDBusConnection::sessionBus());
+    client = new OrgBluezObexClientInterface(orgBluezObexClientString(),
+                                             QStringLiteral("/"),
+                                             QDBusConnection::sessionBus());
 
     qsrand(QTime::currentTime().msec());
-    m_agent_path = agentPath;
-    m_agent_path.append(QString::fromLatin1("/%1").arg(qrand()));
-
-    agent = new AgentAdaptor(this);
-
-    bool res = QDBusConnection::sessionBus().registerObject(m_agent_path, this);
-    if(!res)
-        qCWarning(QT_BT_BLUEZ) << "Failed Creating dbus objects";
 
     qRegisterMetaType<QBluetoothTransferReply*>("QBluetoothTransferReply*");
     QMetaObject::invokeMethod(this, "start", Qt::QueuedConnection);
@@ -91,11 +88,63 @@ QBluetoothTransferReplyBluez::QBluetoothTransferReplyBluez(QIODevice *input, con
 */
 QBluetoothTransferReplyBluez::~QBluetoothTransferReplyBluez()
 {
-    QDBusConnection::sessionBus().unregisterObject(m_agent_path);
+    delete objectTransfer;
+    delete objectPush;
     delete client;
 }
 
+void QBluetoothTransferReplyBluez::fail(QBluetoothTransferReply::TransferError err,
+            const QString msg)
+{
+    m_finished = true;
+    m_running = false;
+    m_errorStr = msg;
+    m_error = err;
+    QMetaObject::invokeMethod(this, "finished",
+                              Qt::QueuedConnection,
+                              Q_ARG(QBluetoothTransferReply*, this));
+}
+
 bool QBluetoothTransferReplyBluez::start()
+{
+    QString dest = request().address().toString();
+    QVariantMap args;
+    args.insert(QStringLiteral("Target"), QStringLiteral("OPP"));
+
+    if (!objectPush) {
+        qCDebug(QT_BT_BLUEZ) << "Creating an outgoing session";
+        QDBusPendingReply<> sessionReply = client->CreateSession(dest, args);
+        QDBusPendingCallWatcher *watcher = new QDBusPendingCallWatcher(sessionReply, this);
+        QObject::connect(watcher, SIGNAL(finished(QDBusPendingCallWatcher*)),
+                         this, SLOT(sessionAcquired(QDBusPendingCallWatcher*)));
+    } else {
+        startPush();
+    }
+    return true;
+}
+
+void QBluetoothTransferReplyBluez::sessionAcquired(QDBusPendingCallWatcher *watcher)
+{
+    QDBusPendingReply<QDBusObjectPath> sessionReply = *watcher;
+    watcher->deleteLater();
+    if (sessionReply.isError()) {
+        QString msg = sessionReply.error().message();
+        qCDebug(QT_BT_BLUEZ) << "Failed to create a session:" << msg;
+        fail(QBluetoothTransferReply::UnknownError, msg);
+        return;
+    }
+
+    qCDebug(QT_BT_BLUEZ) << "Creating a push object for path" << sessionReply.value().path();
+    delete objectPush;
+    objectPush = new OrgBluezObexObjectPushInterface
+        (orgBluezObexClientString(),
+         sessionReply.value().path(),
+         QDBusConnection::sessionBus());
+
+    startPush();
+}
+
+void QBluetoothTransferReplyBluez::startPush()
 {
 //    qDebug() << "Got a:" << source->metaObject()->className();
     QFile *file = qobject_cast<QFile *>(source);
@@ -113,25 +162,18 @@ bool QBluetoothTransferReplyBluez::start()
     }
     else {
         if (!file->exists()) {
-            m_errorStr = QBluetoothTransferReply::tr("File does not exist");
-            m_error = QBluetoothTransferReply::FileNotFoundError;
-            m_finished = true;
-            m_running = false;
-            QMetaObject::invokeMethod(this, "finished", Qt::QueuedConnection, Q_ARG(QBluetoothTransferReply*, this));
-            return false;
+            fail(QBluetoothTransferReply::FileNotFoundError,
+                 QBluetoothTransferReply::tr("File does not exist"));
+            return;
         }
         if (request().address().isNull()) {
-            m_errorStr = QBluetoothTransferReply::tr("Invalid target address");
-            m_error = QBluetoothTransferReply::HostNotFoundError;
-            m_finished = true;
-            m_running = false;
-            QMetaObject::invokeMethod(this, "finished", Qt::QueuedConnection, Q_ARG(QBluetoothTransferReply*, this));
-            return false;
+            fail(QBluetoothTransferReply::HostNotFoundError,
+                 QBluetoothTransferReply::tr("Invalid target address"));
+            return;
         }
-        m_size = file->size();        
+        m_size = file->size();
         startOPP(file->fileName());
     }
-    return true;
 }
 
 bool QBluetoothTransferReplyBluez::copyToTempFile(QIODevice *to, QIODevice *from)
@@ -158,14 +200,9 @@ void QBluetoothTransferReplyBluez::copyDone()
 
 void QBluetoothTransferReplyBluez::startOPP(QString filename)
 {
-    QVariantMap device;
-    QStringList files;
+    qCDebug(QT_BT_BLUEZ) << "Pushing file" << filename;
 
-    device.insert(QString::fromLatin1("Destination"), request().address().toString());
-    files << filename;
-
-    QDBusObjectPath path(m_agent_path);
-    QDBusPendingReply<> sendReply = client->SendFiles(device, files, path);
+    QDBusPendingReply<> sendReply = objectPush->SendFile(filename);
 
     QDBusPendingCallWatcher *watcher = new QDBusPendingCallWatcher(sendReply, this);
     QObject::connect(watcher, SIGNAL(finished(QDBusPendingCallWatcher*)),
@@ -174,24 +211,33 @@ void QBluetoothTransferReplyBluez::startOPP(QString filename)
 
 void QBluetoothTransferReplyBluez::sendReturned(QDBusPendingCallWatcher *watcher)
 {
-    QDBusPendingReply<> sendReply = *watcher;
-    if(sendReply.isError()){
-        m_finished = true;
-        m_running = false;
-        m_errorStr = sendReply.error().message();
-        if (m_errorStr == QStringLiteral("Could not open file for sending")) {
-            m_error = QBluetoothTransferReply::FileNotFoundError;
-            m_errorStr = tr("Could not open file for sending");
-        } else if (m_errorStr == QStringLiteral("The transfer was canceled")) {
-            m_error = QBluetoothTransferReply::UserCanceledTransferError;
-            m_errorStr = tr("The transfer was canceled");
-        } else {
-            m_error = QBluetoothTransferReply::UnknownError;
-        }
-
-        // allow time for the developer to connect to the signal
-        QMetaObject::invokeMethod(this, "finished", Qt::QueuedConnection, Q_ARG(QBluetoothTransferReply*, this));
+    QDBusPendingReply<ObexTransfer> sendReply = *watcher;
+    watcher->deleteLater();
+    if (sendReply.isError()) {
+        QString msg = sendReply.error().message();
+        qCDebug(QT_BT_BLUEZ) << "Send failed:" << sendReply.error().name()
+                             << "," << msg;
+        fail(QBluetoothTransferReply::UnknownError, msg);
+        return;
     }
+
+    qCDebug(QT_BT_BLUEZ) << "Starting to monitor transfer" << sendReply.value().getPath().path();
+
+    delete objectTransfer;
+    objectTransfer = new OrgBluezObexTransferInterface
+        (orgBluezObexClientString(),
+         sendReply.value().getPath().path(),
+         QDBusConnection::sessionBus());
+    QObject::connect(objectTransfer, SIGNAL(Complete()),
+                     this, SLOT(Complete()));
+    QObject::connect(objectTransfer,
+                     SIGNAL(Error(const QString &, const QString &)),
+                     this,
+                     SLOT(Error(const QString &, const QString &)));
+    QObject::connect(objectTransfer,
+                     SIGNAL(PropertyChanged(const QString &, const QDBusVariant &)),
+                     this,
+                     SLOT(Progress(const QString &, const QDBusVariant &)));
 }
 
 QBluetoothTransferReply::TransferError QBluetoothTransferReplyBluez::error() const
@@ -204,51 +250,33 @@ QString QBluetoothTransferReplyBluez::errorString() const
     return m_errorStr;
 }
 
-void QBluetoothTransferReplyBluez::Complete(const QDBusObjectPath &in0)
+void QBluetoothTransferReplyBluez::Complete()
 {
-    Q_UNUSED(in0);
-    m_transfer_path.clear();
+    qCDebug(QT_BT_BLUEZ) << "Transfer complete";
+    delete objectTransfer;
+    objectTransfer = NULL;
     m_finished = true;
     m_running = false;
-}
-
-void QBluetoothTransferReplyBluez::Error(const QDBusObjectPath &in0, const QString &in1)
-{
-    Q_UNUSED(in0);
-    m_transfer_path.clear();
-    m_finished = true;
-    m_running = false;
-    m_errorStr = in1;
-    if (in1 == QStringLiteral("Could not open file for sending")) {
-        m_error = QBluetoothTransferReply::FileNotFoundError;
-        m_errorStr = tr("Could not open file for sending");
-    } else if (in1 == QStringLiteral("Operation canceled")) {
-        m_error = QBluetoothTransferReply::UserCanceledTransferError;
-        m_errorStr = tr("Operation canceled");
-    } else {
-        m_error = QBluetoothTransferReply::UnknownError;
-    }
-
     emit finished(this);
 }
 
-void QBluetoothTransferReplyBluez::Progress(const QDBusObjectPath &in0, qulonglong in1)
+void QBluetoothTransferReplyBluez::Error(const QString &in0, const QString &in1)
 {
-    Q_UNUSED(in0);
-    emit transferProgress(in1, m_size);
+    qCDebug(QT_BT_BLUEZ) << "Transfer error" << in0 << "," << in1;
+    delete objectTransfer;
+    objectTransfer = NULL;
+    fail(QBluetoothTransferReply::UnknownError, in1);
+    emit finished(this);
 }
 
-void QBluetoothTransferReplyBluez::Release()
+void QBluetoothTransferReplyBluez::Progress(const QString &in0, const QDBusVariant &in1)
 {
-    if(m_errorStr.isEmpty())
-        emit finished(this);
-}
+    qCDebug(QT_BT_BLUEZ) << "Property indication for" << in0;
 
-QString QBluetoothTransferReplyBluez::Request(const QDBusObjectPath &in0)
-{
-    m_transfer_path = in0.path();
-
-    return QString();
+    if (in0 == QLatin1String("Progress")) {
+        qlonglong position = in1.variant().toLongLong();
+        emit transferProgress(position, m_size);
+    }
 }
 
 /*!
@@ -269,15 +297,13 @@ bool QBluetoothTransferReplyBluez::isRunning() const
 
 void QBluetoothTransferReplyBluez::abort()
 {
-    if(!m_transfer_path.isEmpty()){
-        OrgOpenobexTransferInterface *xfer = new OrgOpenobexTransferInterface(QLatin1String("org.openobex.client"), m_transfer_path,
-                                                                              QDBusConnection::sessionBus());
-        QDBusPendingReply<> reply = xfer->Cancel();
+    if (objectTransfer) {
+        QDBusPendingReply<> reply =objectTransfer->Cancel();
         reply.waitForFinished();
-        if(reply.isError()){
+        if (reply.isError())
             qCWarning(QT_BT_BLUEZ) << "Failed to abort transfer" << reply.error();
-        }
-        delete xfer;
+        delete objectTransfer;
+        objectTransfer = 0;
     }
 }
 

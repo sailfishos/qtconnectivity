@@ -1,6 +1,6 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
+** Copyright (C) 2015 Jolla Ltd.
 ** Contact: http://www.qt-project.org/legal
 **
 ** This file is part of the QtBluetooth module of the Qt Toolkit.
@@ -39,78 +39,34 @@
 **
 ****************************************************************************/
 
-#ifndef QBLUETOOTHTRANSFERREPLY_BLUEZ_P_H
-#define QBLUETOOTHTRANSFERREPLY_BLUEZ_P_H
+#ifndef OBEXTRANSFER_H
+#define OBEXTRANSFER_H
 
-#include <QtCore/QIODevice>
-#include <QtDBus/QtDBus>
+#include <QDBusObjectPath>
+#include <QDBusArgument>
 
-#include <QtBluetooth/QBluetoothTransferRequest>
-#include <QtBluetooth/QBluetoothTransferManager>
-
-#include "qbluetoothtransferreply.h"
-
-class OrgBluezObexClientInterface;
-class OrgBluezObexManagerInterface;
-class OrgBluezObexObjectPushInterface;
-class OrgBluezObexTransferInterface;
-
-QT_BEGIN_NAMESPACE
-
-class Q_BLUETOOTH_EXPORT QBluetoothTransferReplyBluez : public QBluetoothTransferReply
+class ObexTransfer
 {
-    Q_OBJECT
-
 public:
-    explicit QBluetoothTransferReplyBluez(QIODevice *input, const QBluetoothTransferRequest &request,
-                                          QBluetoothTransferManager *parent = 0);
-    ~QBluetoothTransferReplyBluez();
+    ObexTransfer();
+    ObexTransfer(QDBusObjectPath path, QVariantMap properties);
+    ObexTransfer(const ObexTransfer &other);
+    ObexTransfer& operator=(const ObexTransfer &other);
+    ~ObexTransfer();
 
-    bool isFinished() const;
-    bool isRunning() const;
-
-    QBluetoothTransferReply::TransferError error() const;
-    QString errorString() const;
-
-private Q_SLOTS:
-    bool start();
-    void sessionAcquired(QDBusPendingCallWatcher*);
-
+    friend QDBusArgument &operator<<(QDBusArgument &argument, const ObexTransfer &transfer);
+    friend const QDBusArgument &operator>>(const QDBusArgument &argument, ObexTransfer &transfer);
+ 
+    QDBusObjectPath getPath() const;
+    QVariantMap getProperties() const;
+ 
+    static void registerMetaType();
+ 
 private:
-    void startOPP(QString filename);
-    void startPush();
-    void fail(QBluetoothTransferReply::TransferError err,
-	    const QString message);
-
-    OrgBluezObexTransferInterface *objectTransfer;
-    OrgBluezObexObjectPushInterface *objectPush;
-    OrgBluezObexClientInterface *client;
-
-    QTemporaryFile *tempfile;
-    QIODevice *source;
-
-    bool m_running;
-    bool m_finished;
-
-    quint64 m_size;
-
-    QBluetoothTransferReply::TransferError m_error;
-    QString m_errorStr;
-
-    static bool copyToTempFile(QIODevice *to, QIODevice *from);
-
-private slots:
-    void copyDone();
-
-public slots:
-    void abort();
-    void Complete(void);
-    void Error(const QString &in0, const QString &in1);
-    void Progress(const QString &in0, const QDBusVariant &in1);
-    void sendReturned(QDBusPendingCallWatcher*);
-
+    QDBusObjectPath m_path;
+    QVariantMap m_properties;
 };
+ 
+Q_DECLARE_METATYPE(ObexTransfer)
 
-QT_END_NAMESPACE
-
-#endif // QBLUETOOTHTRANSFERREPLY_H
+#endif // OBEXTRANSFER_H
