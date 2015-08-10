@@ -113,6 +113,7 @@ private:
 #ifdef QT_BLUEZ_BLUETOOTH
     Q_PRIVATE_SLOT(d_func(), void _q_discoveredServices(QDBusPendingCallWatcher*))
     Q_PRIVATE_SLOT(d_func(), void _q_createdDevice(QDBusPendingCallWatcher*))
+    Q_PRIVATE_SLOT(d_func(), void _q_foundDevice(QDBusPendingCallWatcher*))
 #endif
 };
 
