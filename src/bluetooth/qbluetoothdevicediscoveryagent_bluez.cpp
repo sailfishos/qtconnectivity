@@ -126,6 +126,7 @@ void QBluetoothDeviceDiscoveryAgentPrivate::start()
     }
 
     QDBusPendingReply<> discoveryReply = adapter->StartDiscovery();
+    discoveryReply.waitForFinished();
     if (discoveryReply.isError()) {
         delete adapter;
         adapter = 0;
