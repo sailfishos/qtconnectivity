@@ -149,6 +149,11 @@ void QBluetoothServiceDiscoveryAgentPrivate::_q_foundDevice(QDBusPendingCallWatc
             qCDebug(QT_BT_BLUEZ) << "Find device failed Error: " << error << deviceObjectPath.error().name();
             delete adapter;
             adapter = 0;
+            if (singleDevice) {
+                error = QBluetoothServiceDiscoveryAgent::InputOutputError;
+                errorString = QBluetoothServiceDiscoveryAgent::tr("Unable to access device");
+                emit q->error(error);
+            }
             _q_serviceDiscoveryFinished();
             return;
         }
@@ -172,6 +177,8 @@ void QBluetoothServiceDiscoveryAgentPrivate::_q_createdDevice(QDBusPendingCallWa
         return;
     }
 
+    Q_Q(QBluetoothServiceDiscoveryAgent);
+
     const QBluetoothAddress &address = watcher->property("_q_BTaddress").value<QBluetoothAddress>();
 
     qCDebug(QT_BT_BLUEZ) << Q_FUNC_INFO << "created" << address.toString();
@@ -183,6 +190,11 @@ void QBluetoothServiceDiscoveryAgentPrivate::_q_createdDevice(QDBusPendingCallWa
             qCDebug(QT_BT_BLUEZ) << "Create device failed Error: " << error << deviceObjectPath.error().name();
             delete adapter;
             adapter = 0;
+            if (singleDevice) {
+                error = QBluetoothServiceDiscoveryAgent::InputOutputError;
+                errorString = QBluetoothServiceDiscoveryAgent::tr("Unable to access device");
+                emit q->error(error);
+            }
             _q_serviceDiscoveryFinished();
             return;
         }
