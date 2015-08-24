@@ -126,6 +126,7 @@ void QBluetoothDeviceDiscoveryAgentPrivate::start()
     }
 
     QDBusPendingReply<> discoveryReply = adapter->StartDiscovery();
+    discoveryReply.waitForFinished();
     if (discoveryReply.isError()) {
         delete adapter;
         adapter = 0;
@@ -198,18 +199,24 @@ void QBluetoothDeviceDiscoveryAgentPrivate::_q_propertyChanged(const QString &na
 
     if (name == QLatin1String("Discovering") && !value.variant().toBool()) {
         Q_Q(QBluetoothDeviceDiscoveryAgent);
-        adapter->deleteLater();
-        adapter = 0;
         if(pendingCancel && !pendingStart){
+            adapter->deleteLater();
+            adapter = 0;
             emit q->canceled();
             pendingCancel = false;
         }
         else if(pendingStart){
+            adapter->deleteLater();
+            adapter = 0;
             pendingStart = false;
             pendingCancel = false;
             start();
         }
         else {
+            QDBusPendingReply<> reply = adapter->StopDiscovery();
+            reply.waitForFinished();
+            adapter->deleteLater();
+            adapter = 0;
             emit q->finished();
         }
     }
