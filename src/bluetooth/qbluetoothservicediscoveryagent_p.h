@@ -109,6 +109,7 @@ public:
 #ifdef QT_BLUEZ_BLUETOOTH
     void _q_discoveredServices(QDBusPendingCallWatcher *watcher);
     void _q_createdDevice(QDBusPendingCallWatcher *watcher);
+    void _q_foundDevice(QDBusPendingCallWatcher *watcher);
 #endif
 
 private:
@@ -117,6 +118,7 @@ private:
 
 #ifdef QT_BLUEZ_BLUETOOTH
     QVariant readAttributeValue(QXmlStreamReader &xml);
+    void discoverServices(const QString deviceObjectPath);
 #endif
 
 #ifdef QT_QNX_BLUETOOTH
