@@ -1,6 +1,6 @@
 Name:       qt5-qtconnectivity
 Summary:    Qt Connectivity module
-Version:    5.0.0
+Version:    5.6.2
 Release:    1%{?dist}
 Group:      Qt/Qt
 License:    LGPLv2.1 with exception or GPLv3
@@ -73,6 +73,12 @@ mobile and embedded systems without rewriting the source code.
 .
 This package contains the QtNfc development files
 
+%package qtsdpscanner
+Summary:    QtBluetooth SDP scanner
+Group:      Qt/Qt
+
+%description qtsdpscanner
+Tool to perform an SDP scan on remote device.
 
 %prep
 %setup -q -n %{name}-%{version}
@@ -149,4 +155,6 @@ rm -rf %{buildroot}/%{_includedir}/qt5/Qt
 %{_datadir}/qt5/mkspecs/modules/qt_lib_nfc_private.pri
 %{_libdir}/cmake/Qt5Nfc/
 
-
+%files qtsdpscanner
+%defattr(-,root,root,-)
+/usr/lib/qt5/bin/sdpscanner
