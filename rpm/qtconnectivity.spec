@@ -157,4 +157,4 @@ rm -rf %{buildroot}/%{_includedir}/qt5/Qt
 
 %files qtsdpscanner
 %defattr(-,root,root,-)
-/usr/lib/qt5/bin/sdpscanner
+%{_libdir}/qt5/bin/sdpscanner
