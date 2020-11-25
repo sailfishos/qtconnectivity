@@ -133,8 +133,8 @@ rm -rf %{buildroot}/%{_includedir}/qt5/Qt
 %defattr(-,root,root,-)
 %{_libdir}/libQt5Bluetooth.so
 %{_libdir}/libQt5Bluetooth.prl
-%{_libdir}/pkgconfig/*
-%{_includedir}/qt5/*
+%{_libdir}/pkgconfig/Qt5Bluetooth.pc
+%{_includedir}/qt5/QtBluetooth/
 %{_datadir}/qt5/mkspecs/modules/qt_lib_bluetooth.pri
 %{_datadir}/qt5/mkspecs/modules/qt_lib_bluetooth_private.pri
 %{_libdir}/cmake/Qt5Bluetooth/
@@ -149,8 +149,8 @@ rm -rf %{buildroot}/%{_includedir}/qt5/Qt
 %defattr(-,root,root,-)
 %{_libdir}/libQt5Nfc.so
 %{_libdir}/libQt5Nfc.prl
-%{_libdir}/pkgconfig/*
-%{_includedir}/qt5/*
+%{_libdir}/pkgconfig/Qt5Nfc.pc
+%{_includedir}/qt5/QtNfc/
 %{_datadir}/qt5/mkspecs/modules/qt_lib_nfc.pri
 %{_datadir}/qt5/mkspecs/modules/qt_lib_nfc_private.pri
 %{_libdir}/cmake/Qt5Nfc/
