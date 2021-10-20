@@ -2,7 +2,7 @@ Name:       qt5-qtconnectivity
 Summary:    Qt Connectivity module
 Version:    5.6.2
 Release:    1
-License:    LGPLv2.1 with exception or GPLv3
+License:    LGPLv2 with exceptions or LGPLv3
 URL:        https://www.qt.io/
 Source0:    %{name}-%{version}.tar.xz
 BuildRequires:  qt5-qtcore-devel
